@@ -28,7 +28,11 @@ Quando houver alterações nas regras:
 firebase deploy --only firestore:rules,hosting --project saogabriel-sgc-soli
 ```
 
-Enviar código ao GitHub não publica o aplicativo automaticamente. Não há implantação automática configurada.
+O GitHub Pages publica automaticamente alterações em `app-sao-gabriel/` enviadas à branch `main`, pelo workflow `.github/workflows/pages.yml`.
+
+Endereço do Pages: https://allandersom.github.io/app-sao-gabriel/
+
+O Firebase Hosting continua disponível e exige a publicação manual descrita acima. Ambos usam o mesmo banco de dados.
 
 ## Acesso e dados
 
