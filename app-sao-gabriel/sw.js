@@ -1,4 +1,4 @@
-const CACHE = 'sgc-v17';
+const CACHE = 'sgc-v18';
 const FILES = ['./', './index.html', './install.js', './comercial.js', './estoque-simples.js', './importar-caixas.js', './estoque-core.js', './style.css', './firebase-config.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES))));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('sgc-') && key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())));
