@@ -1,5 +1,6 @@
 import {doc,onSnapshot,runTransaction,serverTimestamp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import {diaSP} from './estoque-core.js';
+import {montarImportacao} from './importar-caixas.js';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dataBR=d=>d?d.split('-').reverse().join('/'):'Não informada';
 export function iniciarEstoque(db,auth,fontes){
@@ -66,6 +67,7 @@ export function iniciarEstoque(db,auth,fontes){
       root.querySelectorAll('[data-obra]').forEach(b=>b.onclick=()=>{selecionado=b.dataset.cliente;obraSelecionada=b.dataset.obra;draw();});
     }
     root.querySelector('#caixas-busca').oninput=event=>{busca=event.target.value;listar();};const select=root.querySelector('#caixas-ordem');select.value=ordem;select.onchange=()=>{ordem=select.value;listar();};listar();
+    montarImportacao(conteudo,db,auth,fontes,v=>{busy=v;selecionado=v?'importacao':null;});
   }
   function drawUsina(){
     const cards=root.querySelector('.estoque-stats');while(cards.nextElementSibling)cards.nextElementSibling.remove();

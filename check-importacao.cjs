@@ -1,0 +1,11 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const source=fs.readFileSync('app-sao-gabriel/importar-caixas.js','utf8').replace(/^import .*$/gm,'').replaceAll('export function','function');
+const ctx=vm.createContext({});vm.runInContext(source,ctx);
+const sample={total:3,empresas:[{nome:'Empresa A',obras:[{nome:'Obra 1',qtdCaixas:3,ultimaTrocaCaixas:'2026-10-01'}]}]};
+const result=ctx.prepararImportacao(sample,[]);assert.equal(result.total,3);assert.equal(result.obras,1);assert.equal(result.empresas[0].obras[0].ultimaTrocaCaixas,'');
+assert.throws(()=>ctx.prepararImportacao({...sample,total:4},[]));
+assert.throws(()=>ctx.prepararImportacao({...sample,empresas:[...sample.empresas,...sample.empresas]},[]));
+assert.throws(()=>ctx.prepararImportacao({...sample,substituirCaixas:[{id:'a',nome:'Antiga',quantidade:2}]},[{id:'a',nome:'Antiga',qtdCaixas:1}]));
+const p={...sample,substituirCaixas:[{id:'a',nome:'Antiga',quantidade:2}]};assert.equal(ctx.prepararImportacao(p,[{id:'a',nome:'Antiga',qtdCaixas:2}]).substituidos.length,1);
+assert.equal(vm.runInContext('canonical({b:2,a:1})===canonical({a:1,b:2})',ctx),true);
+console.log('OK: validação de totais, duplicatas e substituições; datas vazias; comparação independente da ordem dos campos.');
