@@ -46,3 +46,5 @@ input:focus,select:focus{border-color:#9872d3;box-shadow:0 0 0 3px #8960c719}but
 #caixas-form label{display:block;margin-top:14px}
 
 button.stat{font:inherit;text-align:left;color:var(--tx);cursor:pointer}button.stat:focus-visible{outline:2px solid var(--ac);outline-offset:2px}#veiculo-form label{display:block;margin-top:14px}
+
+.empresa-caixas-grupo{margin:28px 0}.estoque-area .empresa-caixas-titulo{font-size:21px;font-weight:800;letter-spacing:.5px;line-height:1.4;overflow-wrap:anywhere;margin:0 0 14px}.empresa-caixas-grupo>.item{margin-left:12px;width:calc(100% - 12px)}#caixas-form label{display:block;margin-top:14px}#obras-escolher{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
