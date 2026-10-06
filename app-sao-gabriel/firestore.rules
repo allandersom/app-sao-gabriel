@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function admin() { return request.auth != null && request.auth.token.email == 'kewen.allan.nave@gmail.com'; }
+    function equipe() { return request.auth != null && request.auth.token.email in ['kewen.allan.nave@gmail.com', 'adm2@saogabrieltransportes.com.br']; }
+    match /empresas/{id} {
+      allow read: if true;
+      allow write: if admin();
+    }
+    match /solicitacoes/{id} {
+      allow read: if true;
+      allow write: if admin();
+    }
+    match /estoque/atual {
+      allow read: if true;
+      allow create, update: if admin() && request.resource.data.keys().hasOnly(['locais','atualizadoEm'])
+        && request.resource.data.locais is list && request.resource.data.locais.size() <= 400
+        && request.resource.data.atualizadoEm == request.time;
+    }
+    match /controle_caixas/resumo {
+      allow read: if true;
+      allow create, update: if admin()
+        && request.resource.data.keys().hasOnly(['quantidadeUsina','confirmadoEm'])
+        && (!('quantidadeUsina' in request.resource.data) || (request.resource.data.quantidadeUsina is int && request.resource.data.quantidadeUsina >= 0 && request.resource.data.quantidadeUsina <= 100000))
+        && (!('confirmadoEm' in request.resource.data) || request.resource.data.confirmadoEm == request.time || (resource != null && request.resource.data.confirmadoEm == resource.data.confirmadoEm));
+    }
+    match /estoque_movimentos/{id} {
+      allow read: if equipe();
+      allow create: if admin() && request.resource.data.responsavel == request.auth.uid
+        && request.resource.data.registradoEm == request.time
+        && request.resource.data.tipo in ['inicial','entrega','retirada','carregamento','descarregamento','troca','entrada','baixa','ajuste','estorno'];
+      allow update: if admin() && resource.data.estornadoPor == ''
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estornadoPor'])
+        && request.resource.data.estornadoPor is string && request.resource.data.estornadoPor.size() > 0;
+    }
+  }
+}

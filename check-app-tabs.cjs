@@ -1,0 +1,20 @@
+const fs=require('fs'),assert=require('assert');
+const {chromium}=require('C:/Users/LOGISTICA/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+(async()=>{const browser=await chromium.launch({channel:'msedge',headless:true});try{
+ const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.route('https://app.test/**',r=>r.fulfill({contentType:'text/html',body:'<div id="app"></div>'}));await page.goto('https://app.test/');
+ await page.addStyleTag({content:fs.readFileSync('app-sao-gabriel/style.css','utf8')});
+ await page.addScriptTag({content:`const firebaseConfig={apiKey:'test',authDomain:'test',projectId:'test',appId:'test'};
+const initializeApp=()=>({}),getFirestore=()=>({}),getAuth=()=>({currentUser:null}),iniciarComercial=()=>()=>{},signOut=async()=>{},signInWithEmailAndPassword=async()=>{};
+const doc=(_,c,id)=>({id}),collection=(_,c)=>c,serverTimestamp=()=>null,query=(...v)=>v,orderBy=(...v)=>v,limit=v=>v,startAfter=v=>v,where=(...v)=>v,getDocs=async()=>({docs:[],size:0}),runTransaction=async()=>{},addDoc=async()=>{},deleteDoc=async()=>{},writeBatch=()=>({});
+const onSnapshot=(ref,fn)=>{queueMicrotask(()=>fn(typeof ref==='string'?{docs:[]}:{exists:()=>false}));return ()=>{};};const onAuthStateChanged=(a,fn)=>{queueMicrotask(()=>fn(null));};`});
+ await page.addScriptTag({content:fs.readFileSync('app-sao-gabriel/estoque-core.js','utf8').replaceAll('export ','')});
+ await page.addScriptTag({content:'(()=>{'+fs.readFileSync('app-sao-gabriel/estoque.js','utf8').replace(/^import .*$/gm,'').replace('export function','function')+';window.iniciarEstoque=iniciarEstoque;})();'});
+ const script=fs.readFileSync('app-sao-gabriel/index.html','utf8').match(/<script type="module">([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm,'');await page.addScriptTag({content:'(()=>{'+script+'})();'});
+ await page.getByRole('button',{name:'Controle de caixas',exact:true}).click();await page.getByRole('heading',{name:'Controle de caixas',exact:true}).waitFor();
+ assert(await page.locator('.estoque-area').isVisible());assert.equal(await page.getByRole('button',{name:'+ Movimentação',exact:true}).count(),0);
+ await page.screenshot({path:'app-caixas-mobile.png',fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ await page.getByRole('button',{name:'Empresas',exact:true}).click();assert.equal(await page.locator('.estoque-area').isVisible(),false);await page.getByText('Sua lista de empresas começa aqui').waitFor();
+ await page.getByRole('button',{name:'Solicitações',exact:true}).click();await page.getByText('Nenhuma solicitação por aqui').waitFor();await page.getByRole('button',{name:'Entrar',exact:true}).click();assert(await page.locator('#l-mail').isVisible());
+ assert.deepEqual(errors,[]);console.log('OK: navegação entre as 3 abas, login, visibilidade e layout mobile do aplicativo integrado.');
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exit(1)});

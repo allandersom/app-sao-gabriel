@@ -1,0 +1,24 @@
+const fs=require('fs'),vm=require('vm');
+const html=fs.readFileSync('app-sao-gabriel/index.html','utf8');
+const code=html.match(/<script type="module">([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm,'');
+new vm.Script(code);
+if(html.includes('install-help') || html.includes('class="logo"')) throw Error('Logo/tutorial ainda presentes');
+const {chromium}=require('C:/Users/LOGISTICA/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+(async()=>{
+ const browser=await chromium.launch({headless:true,channel:'msedge'});
+ const page=await browser.newPage({viewport:{width:390,height:844}});
+ await page.setContent(html.replace(/<script[\s\S]*?<\/script>/g,'').replace(/<link[^>]*>/g,''));
+ await page.addStyleTag({content:fs.readFileSync('app-sao-gabriel/style.css','utf8')});
+ const stub=`const firebaseConfig={apiKey:'test',authDomain:'test',projectId:'test',appId:'test'}; const initializeApp=()=>({}),getFirestore=()=>({}),getAuth=()=>({}),collection=()=>({}),onSnapshot=()=>{},onAuthStateChanged=()=>{};`;
+ await page.addScriptTag({content:stub+code});
+ await page.screenshot({path:'design-mobile.png',fullPage:true});
+ if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)) throw Error('Overflow mobile');
+ await page.getByRole('button',{name:'Entrar',exact:true}).click();
+ if(!await page.locator('#l-mail').isVisible()) throw Error('Login não abriu');
+ await page.locator('[data-tab="emp"]').click();
+ if(!await page.getByText('Sua lista de empresas começa aqui').isVisible()) throw Error('Aba empresas não abriu');
+ await page.setViewportSize({width:1440,height:1000});
+ await page.screenshot({path:'design-desktop.png',fullPage:true});
+ await browser.close();
+ console.log('Sintaxe, ausência de logo/tutorial, layout 390px, login e abas: OK (dados simulados, sem gravações).');
+})().catch(e=>{console.error(e);process.exit(1)});

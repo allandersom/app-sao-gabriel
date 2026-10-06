@@ -1,0 +1,19 @@
+# Arquivos locais, credenciais e caches
+.env
+.env.*
+!.env.example
+**/.firebase/
+**/node_modules/
+**/*debug*.log
+*.log
+*service-account*.json
+*serviceAccount*.json
+*.pem
+*.key
+
+# Imagens de testes e arquivos temporários
+/*.png
+/*.zip
+*.tmp
+.DS_Store
+Thumbs.db

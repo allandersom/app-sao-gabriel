@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#5b2a99">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Caçambas SGC">
+<title>Autorizações de Caçambas · São Gabriel</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="connection-status" role="status"></div>
+<div class="wrap" id="app"><div class="panel">Carregando aplicativo… É necessário acesso à internet para conectar ao serviço de dados.</div></div>
+<script src="install.js" defer></script>
+<script type="module">
+import { firebaseConfig } from './firebase-config.js';
+import { iniciarComercial } from './comercial.js';
+import { iniciarEstoque } from './estoque-simples.js';
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getFirestore, collection, doc, addDoc, deleteDoc, writeBatch, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+const configured = ['apiKey', 'authDomain', 'projectId', 'appId'].every(k => firebaseConfig[k] && firebaseConfig[k] !== 'COLE_AQUI');
+if (!configured) {
+  document.querySelector('#app').innerHTML = '<div class="panel"><h1>São Gabriel</h1><p>O aplicativo ainda está em preparação.</p><p>Falta conectar o Firebase para habilitar o login e compartilhar empresas e solicitações entre os celulares.</p></div>';
+} else {
+const fb = initializeApp(firebaseConfig), db = getFirestore(fb), auth = getAuth(fb);
+const atualizarComercial = iniciarComercial(auth, criarSolicitacaoDoPedido);
+const state = { empresas: [], solicitacoes: [] };
+const estoque = iniciarEstoque(db, auth, () => state);
+let login = false, pend = null, admin = false, comercial = false, tab = 'sol', busca = '', adding = false;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = d => d ? d.split('-').reverse().join('/') : '';
+const hoje = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const emp = id => state.empresas.find(e => e.id === id);
+
+const dias = d => Math.round((Date.parse(d + 'T00:00:00Z') - Date.parse(hoje() + 'T00:00:00Z')) / 86400000);
+const vigente = s => s.autorizada && s.situacao !== 'aguardando' && dias(s.inicio) <= 0 && dias(s.fim) >= 0;
+function visivel(s){
+  if (!s.autorizada || dias(s.fim) >= 0) return true;
+  const daEmpresa = state.solicitacoes.filter(x => x.empresa === s.empresa);
+  if (daEmpresa.some(vigente)) return false;
+  // Mantém apenas a última vencida como aviso de que a empresa ficou sem autorização.
+  const ultima = daEmpresa.filter(x => x.autorizada && dias(x.fim) < 0)
+    .sort((a,b) => b.fim.localeCompare(a.fim) || String(a.id).localeCompare(String(b.id)))[0];
+  return ultima?.id === s.id;
+}
+function temContinuacao(x){
+  const seguinte = new Date(Date.parse(x.fim + 'T00:00:00Z') + 86400000).toISOString().slice(0,10);
+  return state.solicitacoes.some(s => s.id !== x.id && s.empresa === x.empresa && s.autorizada && s.situacao !== 'aguardando' && s.inicio === seguinte && s.fim >= s.inicio);
+}
+function status(x){
+  if (x.situacao === 'aguardando') return { t: 'Aguardando autorização', c: 'h', a: 'a' };
+  if (!x.autorizada) return { t: 'Não autorizada', c: 'p', a: 'r' };
+  const f = dias(x.fim), i = dias(x.inicio);
+  if (f < 0) return { t: 'Não autorizada', c: 'p', a: 'r' };
+  if (i > 0) return { t: 'Agendada', c: '' };
+  if ((f === 0 || f === 1) && temContinuacao(x)) return { t: 'Solicitação para os dias seguintes já OK', c: '' };
+  if (f === 0) return { t: 'Vence hoje', c: 'h', a: 'a' };
+  if (f === 1) return { t: 'Vence amanhã', c: 'h', a: 'a' };
+  return { t: 'Em vigor', c: '' };
+}
+function avisos(){
+  return state.solicitacoes.filter(visivel).map(x => ({ x, st: status(x) })).filter(o => o.st.a)
+    .map(o => ({ r: o.st.a === 'r', txt: (emp(o.x.empresa)?.nome || 'Empresa removida') + ': ' + (o.x.situacao === 'aguardando' ? 'aguardando autorização' : o.x.autorizada && dias(o.x.fim) < 0 ? 'NÃO autorizada — última autorização venceu em ' + fmt(o.x.fim) : o.st.a === 'r' ? 'solicitação NÃO autorizada' : 'autorização ' + o.st.t.toLowerCase() + ' (' + fmt(o.x.fim) + ')') }));
+}
+
+function render(){
+  const total = state.solicitacoes.filter(s => s.autorizada && dias(s.fim) >= 0).reduce((a, s) => a + (+s.qtd || 0), 0);
+  const alertas = avisos();
+  let h = `<header><div class="brand"><div class="eyebrow">SÃO GABRIEL · OPERAÇÕES</div><h1>Controle de caçambas<span>.</span></h1><div class="sub">Suas autorizações, em um só lugar.</div></div>
+  <div class="pill ${admin || comercial ? '' : 'v'}">${admin ? 'Administrador' : comercial ? 'Comercial' : 'Somente leitura'}</div><button class="btn g" id="auth" style="padding:6px 12px;font-size:13px">${auth.currentUser ? 'Sair' : 'Entrar'}</button></header>
+  ${login && !auth.currentUser ? '<div class="panel"><div><label>E-mail de acesso</label><input id="l-mail" type="email" autocomplete="username"></div><div><label>Senha</label><input id="l-pass" type="password" autocomplete="current-password"></div><button class="btn" id="dologin">Entrar</button></div>' : ''}
+  <div ${tab==='est'?'hidden':''}><div class="section-heading"><h2>Visão geral</h2><span>Resumo das autorizações</span></div><div class="stats"><div class="stat"><b>${state.empresas.length}</b><span>Empresas</span></div>
+  <div class="stat"><b>${total}</b><span>Caçambas autorizadas</span></div>
+  <div class="stat"><b>${alertas.length}</b><span>Avisos</span></div></div>
+  ${alertas.length ? `<div class="alerts">${alertas.map(a => `<div class="alert ${a.r ? 'r' : ''}">${esc(a.txt)}</div>`).join('')}</div>` : ''}
+  </div><div class="tabs"><button class="tab ${tab==='sol'?'on':''}" data-tab="sol">Solicitações</button><button class="tab ${tab==='emp'?'on':''}" data-tab="emp">Empresas</button><button class="tab ${tab==='est'?'on':''}" data-tab="est">Controle de caixas</button></div>`;
+  h += tab === 'sol' ? viewSol() : tab === 'emp' ? viewEmp() : '';
+  $('#app').innerHTML = h;
+  document.body.classList.toggle('estoque-view', tab === 'est');
+  estoque.mostrar(tab === 'est');
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; adding = false; busca = ''; render(); });
+  const b = $('#busca'); if (b) b.oninput = e => { busca = e.target.value; const p = e.target.selectionStart; render(); const n = $('#busca'); n.focus(); n.setSelectionRange(p, p); };
+  $('#auth').onclick = () => auth.currentUser ? signOut(auth) : (login = !login, render());
+  const dl = $('#dologin'); if (dl) dl.onclick = async () => {
+    try { await signInWithEmailAndPassword(auth, $('#l-mail').value.trim(), $('#l-pass').value); login = false; }
+    catch (e) { toast('E-mail ou senha incorretos'); }
+  };
+  const a = $('#add'); if (a) a.onclick = () => { adding = !adding; render(); };
+  const sv = $('#salvar'); if (sv) sv.onclick = tab === 'sol' ? salvarSol : salvarEmp;
+  const empresaSelect = $('#f-emp');
+  if (empresaSelect) {
+    const obras = () => { $('#f-obra').innerHTML = '<option value="">Sem vínculo de obra</option>' + estoque.locais().filter(l => l.tipo === 'obra' && l.ativo && l.empresa === empresaSelect.value).map(l => `<option value="${esc(l.id)}">${esc(l.nome)}</option>`).join(''); };
+    empresaSelect.onchange = obras; obras();
+  }
+  document.querySelectorAll('[data-vincular-obra]').forEach(button => button.onclick = async () => {
+    const id = button.dataset.vincularObra, obraId = document.getElementById('vinculo-' + id).value;
+    if (!admin) return; button.disabled = true;
+    try { await runTransaction(db, async tx => { const ref = doc(db, 'solicitacoes', id), s = await tx.get(ref); if (!s.exists()) throw Error('Solicitação não encontrada'); tx.update(ref, { obraId }); }); toast('Obra vinculada'); } catch(e) { erro(); } finally { button.disabled = false; }
+  });
+  document.querySelectorAll('[data-del]').forEach(x => x.onclick = () => remover(x.dataset.del, x.dataset.ok));
+  document.querySelectorAll('[data-autorizar]').forEach(button => button.onclick = async () => {
+    button.disabled = true;
+    try {
+      if (!admin) return;
+      const ref = doc(db, 'solicitacoes', button.dataset.autorizar);
+      await runTransaction(db, async transaction => {
+        const snapshot = await transaction.get(ref);
+        if (snapshot.exists() && snapshot.data().situacao === 'aguardando') {
+          transaction.update(ref, { autorizada: true, situacao: 'autorizada' });
+        }
+      });
+      toast('Autorização confirmada');
+    } catch (e) { erro(); } finally { button.disabled = false; }
+  });
+  document.querySelectorAll('[data-cancel]').forEach(x => x.onclick = () => { pend = null; render(); });
+}
+
+function viewSol(){
+  const q = busca.toLowerCase();
+  const lista = state.solicitacoes.filter(visivel).filter(s => (emp(s.empresa)?.nome || '').toLowerCase().includes(q)).sort((a,b) => a.inicio.localeCompare(b.inicio));
+  let h = `<div class="bar"><input id="busca" aria-label="Buscar empresa" placeholder="Buscar empresa..." value="${esc(busca)}">${admin ? '<button class="btn" id="add">+ Nova</button>' : ''}</div>`;
+  if (admin && adding) {
+    h += state.empresas.length ? `<div class="panel"><div><label>Empresa</label><select id="f-emp">${state.empresas.map(e => `<option value="${e.id}">${esc(e.nome)}</option>`).join('')}</select></div>
+    <div><label for="f-obra">Obra no controle de caixas</label><select id="f-obra"></select></div>
+    <div class="row"><div><label>Autorizada de</label><input type="date" id="f-ini" value="${hoje()}"></div><div><label>Até</label><input type="date" id="f-fim" value="${hoje()}"></div></div>
+    <div class="row"><div><label>Nº de caçambas</label><input type="number" id="f-qtd" min="1" value="1"></div><div><label>Situação</label><select id="f-aut"><option value="1">Autorizada</option><option value="aguardando">Aguardando autorização</option><option value="0">Não autorizada</option></select></div></div>
+    <button class="btn" id="salvar">Salvar solicitação</button></div>` : '<div class="panel">Cadastre uma empresa primeiro, na aba Empresas.</div>';
+  }
+  if (!lista.length) return h + '<div class="empty"><span class="empty-mark" aria-hidden="true">＋</span><strong>Nenhuma solicitação por aqui</strong><span>As autorizações cadastradas aparecerão neste espaço.</span></div>';
+  return h + lista.map(s => { const e = emp(s.empresa), st = status(s); return `<div class="item"><div class="m"><div class="t">${esc(e?.nome || 'Empresa removida')} <span class="badge ${st.c}">${st.t}</span></div>
+  <div class="s">${fmt(s.inicio)} a ${fmt(s.fim)}${s.obraId?' · '+esc(estoque.locais().find(l=>l.id===s.obraId)?.nome||'Obra vinculada'):''}</div>
+  ${admin && estoque.locais().some(l=>l.tipo==='obra'&&l.empresa===s.empresa)?`<details class="vinculo-obra"><summary>Vincular obra</summary><select id="vinculo-${esc(s.id)}" aria-label="Obra da solicitação"><option value="">Sem vínculo</option>${estoque.locais().filter(l=>l.tipo==='obra'&&l.empresa===s.empresa).map(l=>`<option value="${esc(l.id)}" ${s.obraId===l.id?'selected':''}>${esc(l.nome)}</option>`).join('')}</select><button class="btn g" data-vincular-obra="${esc(s.id)}">Salvar vínculo</button></details>`:''}
+  </div><div class="qtd"><b>${+s.qtd}</b><span>caçamba${s.qtd > 1 ? 's' : ''}</span></div>
+  ${admin && s.situacao === 'aguardando' ? `<button class="btn g" data-autorizar="${esc(s.id)}" aria-label="Confirmar autorização de ${esc(e?.nome || 'empresa')}" title="Confirmar autorização">✓</button>` : ''}
+  ${admin ? delBtn('s:' + s.id) : ''}</div>`; }).join('');
+}
+
+function viewEmp(){
+  const q = busca.toLowerCase();
+  const lista = state.empresas.filter(e => (e.nome + e.endereco).toLowerCase().includes(q));
+  let h = `<div class="bar"><input id="busca" aria-label="Buscar empresa" placeholder="Buscar empresa..." value="${esc(busca)}">${admin ? '<button class="btn" id="add">+ Nova</button>' : ''}</div>`;
+  if (admin && adding) h += `<div class="panel"><div><label>Nome da empresa</label><input id="f-nome"></div><div><label>Endereço</label><input id="f-end"></div><button class="btn" id="salvar">Salvar empresa</button></div>`;
+  if (!lista.length) return h + '<div class="empty"><span class="empty-mark" aria-hidden="true">＋</span><strong>Sua lista de empresas começa aqui</strong><span>As empresas cadastradas aparecerão neste espaço.</span></div>';
+  return h + lista.map(e => `<div class="item"><div class="m"><div class="t">${esc(e.nome)}</div><div class="s">${esc(e.endereco)}</div></div>
+  ${admin ? delBtn('e:' + e.id) : ''}</div>`).join('');
+}
+
+async function criarSolicitacaoDoPedido(pedido){
+  if (!admin) throw new Error('Apenas o administrador pode atender pedidos.');
+  const normalize = value => String(value || '').trim().toLocaleLowerCase('pt-BR');
+  const existente = state.empresas.find(e => normalize(e.nome) === normalize(pedido.empresa) && normalize(e.endereco) === normalize(pedido.endereco));
+  const empresaId = existente?.id || 'comercial_' + pedido.id;
+  const ref = doc(db, 'solicitacoes', 'comercial_' + pedido.id);
+  const empresaRef = doc(db, 'empresas', empresaId);
+  await runTransaction(db, async transaction => {
+    const snapshot = await transaction.get(ref);
+    // Uma nova tentativa após falha de rede não duplica nem rebaixa uma autorização.
+    if (snapshot.exists()) return;
+    const empresaSnapshot = await transaction.get(empresaRef);
+    if (!empresaSnapshot.exists()) transaction.set(empresaRef, { nome: pedido.empresa, endereco: pedido.endereco });
+    transaction.set(ref, { empresa: empresaId, inicio: pedido.inicio, fim: pedido.fim,
+      qtd: pedido.quantidade, autorizada: false, situacao: 'aguardando', pedidoComercialId: pedido.id });
+  });
+}
+
+async function salvarEmp(){
+  const nome = $('#f-nome').value.trim(), endereco = $('#f-end').value.trim();
+  if (!nome) return toast('Informe o nome da empresa');
+  try { await addDoc(collection(db, 'empresas'), { nome, endereco }); adding = false; render(); } catch (e) { erro(); }
+}
+async function salvarSol(){
+  const empresa = $('#f-emp').value, inicio = $('#f-ini').value, fim = $('#f-fim').value, qtd = parseInt($('#f-qtd').value, 10), autorizada = $('#f-aut').value === '1';
+  const situacao = $('#f-aut').value === 'aguardando' ? 'aguardando' : autorizada ? 'autorizada' : 'nao_autorizada';
+  const obraId = $('#f-obra')?.value || '';
+  if (!inicio || !fim || !qtd || qtd < 1) return toast('Preencha as datas e a quantidade');
+  if (fim < inicio) return toast('A data final não pode ser antes da inicial');
+  try { await addDoc(collection(db, 'solicitacoes'), { empresa, inicio, fim, qtd, autorizada, situacao, obraId }); adding = false; render(); } catch (e) { erro(); }
+}
+const erro = () => toast('Não foi possível salvar. Verifique a conexão e o login.');
+function delBtn(k){
+  return pend === k
+    ? `<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn d" data-del="${k}" data-ok="1">Confirmar</button><button class="btn g" data-cancel="1" style="padding:7px 11px;font-size:13px">Cancelar</button></div>`
+    : `<button class="btn d" data-del="${k}">${k.startsWith('e:') ? 'Excluir empresa' : 'Remover'}</button>`;
+}
+async function remover(k, ok){
+  if (!admin) return;
+  if (!ok) { pend = k; render(); return; }
+  pend = null;
+  const [t, id] = k.split(':');
+  try {
+    if (t === 'e') {
+      if (!estoque.pronto()) return toast('Aguarde o carregamento do controle de caixas antes de excluir empresas.');
+      if (estoque.temEmpresa(id)) return toast('Esta empresa possui locais no controle de caixas. Preserve o cadastro e arquive os locais sem saldo.');
+      const totalVinculadas = state.solicitacoes.filter(x => x.empresa === id).length;
+      if (!confirm(`Excluir esta empresa${totalVinculadas ? ' e suas ' + totalVinculadas + ' solicitação(ões)' : ''}? Esta ação não pode ser desfeita.`)) { render(); return; }
+      const b = writeBatch(db);
+      state.solicitacoes.filter(x => x.empresa === id).forEach(x => b.delete(doc(db, 'solicitacoes', x.id)));
+      b.delete(doc(db, 'empresas', id));
+      await b.commit();
+    } else await deleteDoc(doc(db, 'solicitacoes', id));
+  } catch (e) { erro(); }
+  render();
+}
+
+function toast(m){ const t = document.createElement('div'); t.className = 'toast'; t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 2500); }
+
+render();
+// Atualiza a validade mesmo sem alterações no banco ou com o app aberto à meia-noite.
+let diaExibido = hoje(), viradaTimer;
+function atualizarValidade(){
+  clearTimeout(viradaTimer);
+  const dia = hoje();
+  if (dia !== diaExibido) { diaExibido = dia; render(); }
+  const proximaVirada = Date.parse(dia + 'T00:00:00-03:00') + 86400000;
+  viradaTimer = setTimeout(atualizarValidade, Math.max(50, proximaVirada - Date.now() + 50));
+}
+atualizarValidade();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizarValidade(); });
+window.addEventListener('focus', atualizarValidade);
+const falha = () => toast('Falha ao carregar os dados. Verifique a configuração.');
+onSnapshot(collection(db, 'empresas'), sn => { state.empresas = sn.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.nome.localeCompare(b.nome)); render(); }, falha);
+onSnapshot(collection(db, 'solicitacoes'), sn => { state.solicitacoes = sn.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, falha);
+onAuthStateChanged(auth, u => { admin = !!u && u.email === 'kewen.allan.nave@gmail.com'; comercial = !!u && u.email === 'adm2@saogabrieltransportes.com.br'; login = false; adding = false; render(); atualizarComercial(u); });
+}
+</script>
+</body>
+</html>

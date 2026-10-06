@@ -1,0 +1,25 @@
+const fs=require('fs'),assert=require('assert');
+const {chromium}=require('C:/Users/LOGISTICA/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+(async()=>{const browser=await chromium.launch({channel:'msedge',headless:true});try{
+const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+await page.setContent('<div id="app"></div>');await page.addStyleTag({content:fs.readFileSync('app-sao-gabriel/style.css','utf8')});
+await page.addScriptTag({content:`const diaSP=()=>'2026-10-06';const auth={currentUser:{uid:'admin',email:'kewen.allan.nave@gmail.com'}};const empresas=[{id:'a',nome:'Cliente A',endereco:'Rua A'}];const doc=()=>({}),onSnapshot=(r,fn)=>fn({exists:()=>true,data:()=>({locais:[{tipo:'obra',empresa:'a',saldo:3},{tipo:'obra',empresa:'a',saldo:2}]})}),runTransaction=async(db,fn)=>fn({get:async()=>({exists:()=>true}),update:(ref,changes)=>Object.assign(empresas[0],changes)});`});
+await page.addScriptTag({content:fs.readFileSync('app-sao-gabriel/estoque-simples.js','utf8').replace(/^import .*$/gm,'').replace('export function','function')+';window.controle=iniciarEstoque({},auth,()=>({empresas}));controle.mostrar(true);'});
+assert.equal(await page.locator('.qtd b').textContent(),'5');assert.equal(await page.getByText('Histórico',{exact:true}).count(),0);assert.equal(await page.getByText('+ Movimentação',{exact:true}).count(),0);
+await page.locator('[data-cliente]').click();await page.locator('#caixas-qtd').fill('7');await page.locator('#caixas-data').fill('2026-10-05');await page.getByRole('button',{name:'Salvar',exact:true}).click();await page.getByText('Dados salvos.',{exact:true}).waitFor();assert.equal(await page.locator('.qtd b').textContent(),'7');assert((await page.locator('.cliente-caixas').textContent()).includes('05/10/2026'));
+await page.locator('[data-cliente]').click();await page.locator('#caixas-data').fill('2026-10-06');await page.getByRole('button',{name:'Salvar',exact:true}).click();assert.equal(await page.locator('.qtd b').textContent(),'7');
+assert.deepEqual(await page.locator('.estoque-stats b').allTextContents(),['7','0','0','7']);
+await page.evaluate(()=>{empresas.push({id:'zero',nome:'Cliente sem caixas',qtdCaixas:0});controle.mostrar(true);});
+assert.equal(await page.locator('[data-cliente]').count(),1);assert.equal(await page.locator('#caixas-incluir option[value="zero"]').count(),1);
+await page.locator('summary').click();await page.locator('#caixas-incluir').selectOption('zero');assert.equal(await page.locator('#caixas-qtd').inputValue(),'0');await page.getByRole('button',{name:'Voltar',exact:true}).click();
+await page.evaluate(()=>{auth.currentUser=null;controle.mostrar(true);});assert.equal(await page.locator('[data-cliente]').count(),0);assert.equal(await page.locator('.qtd b').textContent(),'7');assert.equal(await page.locator('#caixas-incluir').count(),0);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.deepEqual(errors,[]);
+await page.evaluate(()=>{empresas.push({id:'velho',nome:'Cliente Z',qtdCaixas:2,ultimaTrocaCaixas:'2026-09-01'},{id:'medio',nome:'Cliente M',qtdCaixas:1,ultimaTrocaCaixas:'2026-10-01'},{id:'sem',nome:'Cliente B',qtdCaixas:1});controle.mostrar(true);});
+await page.locator('#caixas-ordem').selectOption('tempo');
+assert.deepEqual(await page.locator('.cliente-caixas .t').allTextContents(),['Cliente Z','Cliente M','Cliente A','Cliente B']);
+assert((await page.locator('.cliente-caixas').first().textContent()).includes('35 dias sem troca'));
+await page.locator('#caixas-busca').fill('Cliente M');assert.equal(await page.locator('.cliente-caixas').count(),1);
+assert.deepEqual(await page.locator('.estoque-stats b').allTextContents(),['11','0','0','11']);
+await page.locator('#caixas-busca').fill('');await page.evaluate(()=>controle.mostrar(true));assert.equal(await page.locator('#caixas-ordem').inputValue(),'tempo');
+await page.locator('#caixas-ordem').selectOption('nome');assert.deepEqual(await page.locator('.cliente-caixas .t').allTextContents(),['Cliente A','Cliente B','Cliente M','Cliente Z']);assert.deepEqual(errors,[]);
+console.log('OK: edição, cartões, zero oculto, ordenação por dias sem troca, datas ausentes no fim, busca combinada e totais preservados.');
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exit(1)});
