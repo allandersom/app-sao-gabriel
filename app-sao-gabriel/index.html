@@ -74,7 +74,7 @@ function avisos(){
 function render(){
   const total = state.solicitacoes.filter(s => s.autorizada && dias(s.fim) >= 0).reduce((a, s) => a + (+s.qtd || 0), 0);
   const alertas = avisos();
-  let h = `<header><div class="brand"><div class="eyebrow">SÃO GABRIEL · OPERAÇÕES</div><h1>Controle de caçambas<span>.</span></h1><div class="sub">Suas autorizações, em um só lugar.</div></div>
+  let h = `<header><div class="brand"><div class="eyebrow">SÃO GABRIEL · OPERAÇÕES</div><h1>Controle de caçambas<span>.</span></h1></div>
   <div class="pill ${admin || comercial ? '' : 'v'}">${admin ? 'Administrador' : comercial ? 'Comercial' : 'Somente leitura'}</div><button class="btn g" id="auth" style="padding:6px 12px;font-size:13px">${auth.currentUser ? 'Sair' : 'Entrar'}</button></header>
   ${login && !auth.currentUser ? '<div class="panel"><div><label>E-mail de acesso</label><input id="l-mail" type="email" autocomplete="username"></div><div><label>Senha</label><input id="l-pass" type="password" autocomplete="current-password"></div><button class="btn" id="dologin">Entrar</button></div>' : ''}
   <div ${(tab==='est'||tab==='dev')?'hidden':''}><div class="section-heading"><h2>Visão geral</h2><span>Resumo das autorizações</span></div><div class="stats"><div class="stat"><b>${state.empresas.length}</b><span>Empresas</span></div>
