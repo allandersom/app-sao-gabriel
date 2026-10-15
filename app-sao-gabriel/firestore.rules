@@ -7,6 +7,14 @@ service cloud.firestore {
       allow read: if true;
       allow write: if admin();
     }
+    match /devolucoes/{id} {
+      allow read: if true;
+      allow create, update: if admin()
+        && request.resource.data.keys().hasOnly(['cliente','retirada','quantidade'])
+        && request.resource.data.cliente is string && request.resource.data.cliente.size() > 0 && request.resource.data.cliente.size() <= 200
+        && request.resource.data.retirada is string && request.resource.data.retirada.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.quantidade is int && request.resource.data.quantidade >= 0 && request.resource.data.quantidade <= 100000;
+    }
     match /solicitacoes/{id} {
       allow read: if true;
       allow write: if admin();

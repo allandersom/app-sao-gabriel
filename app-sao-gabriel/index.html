@@ -19,6 +19,7 @@
 <script type="module">
 import { firebaseConfig } from './firebase-config.js';
 import { iniciarComercial } from './comercial.js';
+import { iniciarDevolucao } from './devolucao.js?v=20';
 import { iniciarEstoque } from './estoque-simples.js?v=19';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getFirestore, collection, doc, addDoc, deleteDoc, writeBatch, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -31,6 +32,7 @@ const fb = initializeApp(firebaseConfig), db = getFirestore(fb), auth = getAuth(
 const atualizarComercial = iniciarComercial(auth, criarSolicitacaoDoPedido);
 const state = { empresas: [], solicitacoes: [] };
 const estoque = iniciarEstoque(db, auth, () => state);
+const devolucao = iniciarDevolucao(db, auth, () => state);
 let login = false, pend = null, admin = false, comercial = false, tab = 'sol', busca = '', adding = false;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -75,15 +77,16 @@ function render(){
   let h = `<header><div class="brand"><div class="eyebrow">SÃO GABRIEL · OPERAÇÕES</div><h1>Controle de caçambas<span>.</span></h1><div class="sub">Suas autorizações, em um só lugar.</div></div>
   <div class="pill ${admin || comercial ? '' : 'v'}">${admin ? 'Administrador' : comercial ? 'Comercial' : 'Somente leitura'}</div><button class="btn g" id="auth" style="padding:6px 12px;font-size:13px">${auth.currentUser ? 'Sair' : 'Entrar'}</button></header>
   ${login && !auth.currentUser ? '<div class="panel"><div><label>E-mail de acesso</label><input id="l-mail" type="email" autocomplete="username"></div><div><label>Senha</label><input id="l-pass" type="password" autocomplete="current-password"></div><button class="btn" id="dologin">Entrar</button></div>' : ''}
-  <div ${tab==='est'?'hidden':''}><div class="section-heading"><h2>Visão geral</h2><span>Resumo das autorizações</span></div><div class="stats"><div class="stat"><b>${state.empresas.length}</b><span>Empresas</span></div>
+  <div ${(tab==='est'||tab==='dev')?'hidden':''}><div class="section-heading"><h2>Visão geral</h2><span>Resumo das autorizações</span></div><div class="stats"><div class="stat"><b>${state.empresas.length}</b><span>Empresas</span></div>
   <div class="stat"><b>${total}</b><span>Caçambas autorizadas</span></div>
   <div class="stat"><b>${alertas.length}</b><span>Avisos</span></div></div>
   ${alertas.length ? `<div class="alerts">${alertas.map(a => `<div class="alert ${a.r ? 'r' : ''}">${esc(a.txt)}</div>`).join('')}</div>` : ''}
-  </div><div class="tabs"><button class="tab ${tab==='sol'?'on':''}" data-tab="sol">Solicitações</button><button class="tab ${tab==='emp'?'on':''}" data-tab="emp">Empresas</button><button class="tab ${tab==='est'?'on':''}" data-tab="est">Controle de caixas</button></div>`;
+  </div><div class="tabs"><button class="tab ${tab==='sol'?'on':''}" data-tab="sol">Solicitações</button><button class="tab ${tab==='emp'?'on':''}" data-tab="emp">Empresas</button><button class="tab ${tab==='est'?'on':''}" data-tab="est">Controle de caixas</button><button class="tab ${tab==='dev'?'on':''}" data-tab="dev">Devolução</button></div>`;
   h += tab === 'sol' ? viewSol() : tab === 'emp' ? viewEmp() : '';
   $('#app').innerHTML = h;
   document.body.classList.toggle('estoque-view', tab === 'est');
   estoque.mostrar(tab === 'est');
+  devolucao.mostrar(tab === 'dev');
   document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; adding = false; busca = ''; render(); });
   const b = $('#busca'); if (b) b.oninput = e => { busca = e.target.value; const p = e.target.selectionStart; render(); const n = $('#busca'); n.focus(); n.setSelectionRange(p, p); };
   $('#auth').onclick = () => auth.currentUser ? signOut(auth) : (login = !login, render());
